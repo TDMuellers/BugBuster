@@ -1,2 +1,2 @@
 # BugBuster
-Generative model for novel insecticides
+Generative modeling for novel insecticides
