@@ -134,9 +134,9 @@ class Scatter(torch.nn.Module):
 
         #x = scatter_mean(x, batch, dim=0)
         if hasattr(data, 'batch'):
-            x = scatter_moments(x, data.batch, 4)
+            x = scatter_moments(x, data.batch, 3)
         else:
-            x = scatter_moments(x, torch.zeros(data.x.shape[0], dtype=torch.int32), 4)
+            x = scatter_moments(x, torch.zeros(data.x.shape[0], dtype=torch.int32), 3)
             # print('x returned shape', x.shape)
         return x, self.wavelet_constructor
 
@@ -179,6 +179,7 @@ def feng_filters():
 
 
 def scatter_moments(graph, batch_indices, moments_returned=4):
+    # issue with divisions leading to NaNs when calculating kurtosis; thus, changed moments_returned from 4 to 3
     
     """ Compute specified statistical coefficients for each feature of each graph passed. 
         The graphs expected are disjoint subgraphs within a single graph, whose feature tensor is passed as argument "graph."
@@ -245,7 +246,7 @@ def scatter_moments(graph, batch_indices, moments_returned=4):
             )
 
         # skew: 3rd moment divided by cubed standard deviation (sd = sqrt variance), with correction for division by zero (inf -> 0)
-        skew = m(3) / (variance ** (3 / 2)) 
+        skew = m(3) / (variance ** (3 / 2) + 1e-8) 
         skew[
             skew > 1000000000000000
         ] = 0  # multivalued tensor division by zero produces inf
@@ -258,7 +259,7 @@ def scatter_moments(graph, batch_indices, moments_returned=4):
             )
 
         # kurtosis: fourth moment, divided by variance squared. Using Fischer's definition to subtract 3 (default in scipy)
-        kurtosis = m(4) / (variance ** 2) - 3 
+        kurtosis = m(4) / (variance ** 2 + 1e-8) - 3 
         kurtosis[kurtosis > 1000000000000000] = -3
         kurtosis[kurtosis != kurtosis] = -3
         if moments_returned >= 4:
