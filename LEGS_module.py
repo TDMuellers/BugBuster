@@ -214,7 +214,7 @@ def scatter_moments(graph, batch_indices, moments_returned=4):
 
     for data in graph_features:
 
-        data = data.squeeze()
+        data = data.squeeze(dim=2)
         
         def m(i):  # ith moment, computed with derivation data
             return torch.mean(deviation_data ** i, axis=1)
