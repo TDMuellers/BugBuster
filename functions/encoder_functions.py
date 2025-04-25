@@ -102,14 +102,14 @@ class ScatterNet(nn.Module):
                                             # of moments that are calculated
 
         self.linear2 = Linear(128, 64)
-        self.linear3 = Linear(64, 16)
-        self.embedding_layer = Linear(16, 16)
+        self.linear3 = Linear(64, 64)
+        self.embedding_layer = Linear(64, 32)
 
         self.act = torch.nn.LeakyReLU()
         
         self.dropout = nn.Dropout(p)
         
-        self.classifier = Linear(16, num_classes)
+        self.classifier = Linear(32, num_classes)
 
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
