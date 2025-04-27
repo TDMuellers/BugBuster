@@ -21,14 +21,6 @@ from torch_geometric.utils import to_networkx
 from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
 
-# For visualization
-import phate
-
-# Graph scattering functionality
-from LEGS_module import *
-
-# Home-grown functions
-from utils import *
 
 # Function to add padding to target matrices to match the output dimensions
 def pad_graphs(input_x, input_edge_index, input_edge_attr, D = 88):

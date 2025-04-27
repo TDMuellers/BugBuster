@@ -21,14 +21,8 @@ from torch_geometric.utils import to_networkx
 from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
 
-# For visualization
-import phate
-
 # Graph scattering functionality
-from LEGS_module import *
-
-# Home-grown functions
-from utils import *
+from functions.LEGS_module import *
 
 global smoothness_lambda 
 smoothness_lambda = 1e-2 # for calculating composite loss
