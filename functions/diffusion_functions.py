@@ -176,15 +176,8 @@ def generate_new_points(model, noise_scheduler, desired_logP):
     
 def plot_generated_point(generated_new_points, desired_logP_list, index):
     # Show the results
-    x = generated_new_points[index]
-    img = x[0] 
-    img = img.detach().numpy()
-    
-    # squeeze to remove the channel dimension.
-    if img.shape[0] == 1:
-        img = np.squeeze(img, axis=0)
-    else:
-        img = np.transpose(img, (1, 2, 0))
+    img = generated_new_points[index]
+    img = img.reshape(4,8)
     
     plt.figure(figsize=(8, 4))
     plt.imshow(img, cmap='magma' if img.ndim == 2 else None, interpolation='nearest')
