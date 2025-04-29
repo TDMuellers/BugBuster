@@ -35,6 +35,32 @@ def pad_graphs(input_x, input_edge_index, input_edge_attr, D = 88):
 
     return padded_x, padded_edge_index, padded_edge_attr
 
+# Function to reshape the edge index representation into an adjacency matrix
+# and unfold it into a vector
+def reshape_index(input_index, D=88):
+    D = D + 1
+    adj = np.zeros((D,D))
+    for pair in input_index.T:
+        i = pair[0].numpy()
+        j = pair[1].numpy()
+        adj[i, j] = 1
+    adj = adj[1:D, 1:D]
+    
+    linearized = adj[np.triu_indices(D-1, k=1)]
+    return torch.tensor(linearized)
+
+# Once we have predicted edges,
+# need some way to unfold into a valid symmetric adjacency matrix
+def unfold_index(linearized, D=88):
+    adj = np.zeros((D, D))
+    
+    counter = 0
+    for j in range(D-1):
+        segment = D - j - 1
+        adj[j, j+1:D] = linearized[counter:counter + segment]
+        counter += segment
+    symmetric = adj + adj.T - np.diag(np.diag(adj + adj.T))
+    return symmetric
 class DecodeNet(nn.Module):
     """
     Initialize an MLP for re-creating graph representations from latent space.
@@ -70,11 +96,12 @@ class DecodeNet(nn.Module):
 
         # one head for predicting edge_index
         self.edge_index_fc = nn.Sequential(
-            Linear(128, 128),
-            nn.ReLU(),
             Linear(128, 64),
-            nn.ReLU(),
-            Linear(64, 2*D))
+            nn.Sigmoid(),
+            Linear(64, 128),
+            nn.Sigmoid(),
+            Linear(128, int(D*(D-1)/2)),
+            nn.Sigmoid())
 
         # one head for predicting edge_attr
         self.edge_attr_fc = nn.Sequential(
@@ -97,9 +124,7 @@ class DecodeNet(nn.Module):
 
         # Predict edge_index and reshape
         edge_index = self.edge_index_fc(h)
-        edge_index = edge_index.view(-1, 2, self.D)
         edge_index = torch.squeeze(edge_index, 0)
-        edge_index = edge_index.to(torch.int64)
 
         # Predict edge_attr and reshape
         edge_attr = self.edge_attr_fc(h)
@@ -108,6 +133,7 @@ class DecodeNet(nn.Module):
 
         return x, edge_index, edge_attr 
 
+        
 def train_decoder_epoch(model, optimizer, train_loader):
     """Train the model for one epoch.
     Args:
@@ -124,7 +150,7 @@ def train_decoder_epoch(model, optimizer, train_loader):
 
     # what loss functions are used for each of our three targets?
     x_criterion = nn.MSELoss()
-    edge_index_criterion = nn.MSELoss()  # TODO: think about cross entropy loss here?
+    edge_index_criterion = nn.BCELoss() 
     edge_attr_criterion = nn.MSELoss()
     
     # evaluate on the train nodes
@@ -143,9 +169,12 @@ def train_decoder_epoch(model, optimizer, train_loader):
         edge_index_loss = edge_index_criterion(edge_index.to(torch.float), target_edge_index.to(torch.float))  ## something strange w data types here
         edge_attr_loss = edge_attr_criterion(edge_attr, target_edge_attr)
 
-        # aggregate the total loss
-        loss = x_loss + edge_index_loss + edge_attr_loss
-
+        # calculate L1 regularization loss
+        l1_norm = sum(torch.sum(torch.abs(param)) for param in model.parameters())
+        
+        # incentivize predicting edge loss
+        loss = edge_index_loss + loss_lambda * x_loss + loss_lambda * edge_attr_loss
+        
         loss.backward()
         loss_epoch += loss.detach().numpy() * batch_size
 
@@ -155,7 +184,7 @@ def train_decoder_epoch(model, optimizer, train_loader):
     loss_epoch = loss_epoch / len(train_loader.dataset)
 
     return loss_epoch 
-
+    
 def test_decoder_epoch(model, train_loader):
     """Test the model for one epoch.
     Args:
@@ -170,7 +199,7 @@ def test_decoder_epoch(model, train_loader):
     
     # what loss functions are used for each of our three targets?
     x_criterion = nn.MSELoss()
-    edge_index_criterion = nn.MSELoss()  # TODO: think about cross entropy loss here?
+    edge_index_criterion = nn.BCELoss() 
     edge_attr_criterion = nn.MSELoss()
     
     with torch.no_grad():  # disable gradient calculation
@@ -190,17 +219,21 @@ def test_decoder_epoch(model, train_loader):
             edge_index_loss = edge_index_criterion(edge_index.to(torch.float), target_edge_index.to(torch.float))  ## something strange w data types here
             edge_attr_loss = edge_attr_criterion(edge_attr, target_edge_attr)
             
-            # aggregate the total loss
-            loss = x_loss + edge_index_loss + edge_attr_loss
+            # calculate L1 regularization loss
+            l1_norm = sum(torch.sum(torch.abs(param)) for param in model.parameters())
             
+            # aggregate the total loss
+      #      loss = x_loss + edge_index_loss + edge_attr_loss + regularization_lambda * l1_norm
+
+            # incentivize predicting edge loss
+            loss = edge_index_loss + loss_lambda * x_loss + loss_lambda * edge_attr_loss
+         
             loss_epoch += loss.detach().numpy() * batch_size
 
         # calculate test loss for the epoch
         loss_epoch = loss_epoch / len(test_loader.dataset)
                 
     return loss_epoch
-
-
 
 def train_decoder(model, train_loader, test_loader, optimizer, epochs=5):
     """Train the model.
