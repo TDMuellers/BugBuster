@@ -7,6 +7,9 @@ import torch
 import torch_geometric
 from torch_geometric.utils import to_networkx
 
+import rdkit
+from rdkit import Chem
+
 import networkx as nx
 
 def unpad_graphs(generated_graphs):
@@ -95,3 +98,96 @@ def graph_isomorphism_between_sets(initial_graphs, generated_graphs):
                 
     percent_unique = 100*(len(generated_graphs) - sum(isomorphic_tracker))/len(generated_graphs)
     return print(f'Compared to the initial graphs used for training, generated graphs are {percent_unique}% unique')
+
+x_map = {
+    'atomic_num':
+    list(range(0, 119)),
+    'degree':
+    list(range(0, 11)),
+    'formal_charge':
+    list(range(-5, 7))
+}
+
+# only specify bond type
+e_map = {
+    'bond_type': [
+        'UNSPECIFIED',
+        'SINGLE',
+        'DOUBLE',
+        'TRIPLE',
+        'QUADRUPLE',
+        'QUINTUPLE',
+        'HEXTUPLE',
+        'ONEANDAHALF',
+        'TWOANDAHALF',
+        'THREEANDAHALF',
+        'FOURANDAHALF',
+        'FIVEANDAHALF',
+        'AROMATIC',
+        'HYDROGEN',
+        'THREECENTER',
+    ]
+}
+
+def mol_reconstruct(valid_graphs):
+    '''
+    This function takes valid graphs with adjacency matrices at their edge index position
+    and tries to reconstruct a valid molecule
+    '''
+    
+    mol_out = []
+    valid_mol = []
+    validity_tracker = 0
+    
+    # first reconstruct the node features, edge indices, and edge features in appropriate format
+    for graph in valid_graphs:
+        graph_temp = copy.deepcopy(graph) 
+
+        D = graph_temp.edge_index.shape[0] # determine dimension of adjacency matrix
+        
+        # this block takes the adjacency matrix and reconstructs edge indices needed for RDKIT
+        G_temp= nx.from_numpy_array(graph_temp.edge_index, create_using = nx.MultiGraph())
+        nx.write_adjlist(G_temp, "gtemp.adjlist")
+        G_edge_pairs = nx.read_adjlist("gtemp.adjlist")
+        
+        edge_pair_inverse = G_edge_pairs.edges
+        graph_temp.edge_index = torch.swapaxes(torch.tensor(np.array(edge_pair_inverse, dtype=int)), 0, 1)
+        D_edge = graph_temp.edge_index.shape[1]
+
+        # this block takes the node features and rounds them needed for RDKIT
+        graph_temp.x = np.array(np.round(graph_temp.x), dtype=int)[0:D]
+
+        # this block takes the node features and rounds them needed for RDKIT
+        graph_temp.edge_attr = np.array(np.round(graph_temp.edge_attr), dtype=int)[0:D_edge]
+
+        # now attempt to reconstruct valid molecules
+        mol = Chem.RWMol()
+
+        for i in range(graph_temp.num_nodes):
+            atom = Chem.Atom(int(graph_temp.x[i, 0].item()))
+            atom.SetFormalCharge(x_map['formal_charge'][int(graph_temp.x[i, 2].item())])
+            mol.AddAtom(atom)
+        
+        edges = [tuple(i) for i in graph_temp.edge_index.t().tolist()]
+        
+        for i in range(len(edges)):
+            src, dst = edges[i]
+        
+            bond_type = Chem.BondType.values[int(graph_temp.edge_attr[i, 0].item())]
+            mol.AddBond(src, dst, bond_type)
+        
+        reconstructed_mol = mol.GetMol()
+        mol_out.append(reconstructed_mol)
+
+        try:
+            Chem.SanitizeMol(mol)
+            is_sanitized = True
+            valid_mol.append(reconstructed_mol)
+            validity_tracker += 1
+            
+        except Chem.AtomValenceException as e:
+            is_sanitized = False            
+            
+    print(f'There are {validity_tracker} valid molecules, with a percent validity of {100*(validity_tracker/len(valid_graphs))}%')
+    
+    return mol_out, valid_mol
