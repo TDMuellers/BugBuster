@@ -379,8 +379,8 @@ def to_smiles(data: 'torch_geometric.data.Data') -> Any:
     mol = Chem.RWMol()
 
     for i in range(data.num_nodes):
-        atom = Chem.Atom(data.x[i, 0].item())
-        atom.SetFormalCharge(x_map['formal_charge'][data.x[i, 2].item()])
+        atom = Chem.Atom(int(data.x[i, 0].item()))
+        atom.SetFormalCharge(x_map['formal_charge'][int(data.x[i, 2].item())])
         mol.AddAtom(atom)
 
     edges = [tuple(i) for i in data.edge_index.t().tolist()]
@@ -391,7 +391,7 @@ def to_smiles(data: 'torch_geometric.data.Data') -> Any:
         if tuple(sorted(edges[i])) in visited:
             continue
 
-        bond_type = Chem.BondType.values[data.edge_attr[i, 0].item()]
+        bond_type = Chem.BondType.values[int(data.edge_attr[i, 0].item())]
         mol.AddBond(src, dst, bond_type)
 
         visited.add(tuple(sorted(edges[i])))
