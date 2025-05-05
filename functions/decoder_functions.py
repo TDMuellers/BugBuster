@@ -21,23 +21,23 @@ from torch_geometric.utils import to_networkx
 from torch_geometric.data import Data, Dataset
 from torch_geometric.loader import DataLoader
 
-
 # Function to add padding to target matrices to match the output dimensions
-def pad_graphs(input_x, input_edge_index, input_edge_attr, D = 88):
+def pad_graphs(input_x, input_edge_index, input_edge_attr, D = 82):
     extra_x = int((D/2) - input_x.shape[0])
     padded_x = F.pad(input_x, (0, 0, 0, extra_x), value=0)
 
     extra_edge_index = int(D - input_edge_index.shape[1])
     padded_edge_index = F.pad(input_edge_index, (0, extra_edge_index, 0, 0), value=0)
 
-    extra_edge_attr = int(88 - input_edge_attr.shape[0])
+    extra_edge_attr = int(D - input_edge_attr.shape[0])
     padded_edge_attr = F.pad(input_edge_attr, (0, 0, 0, extra_edge_attr), value=0)
 
     return padded_x, padded_edge_index, padded_edge_attr
 
+
 # Function to reshape the edge index representation into an adjacency matrix
 # and unfold it into a vector
-def reshape_index(input_index, D=88):
+def reshape_index(input_index, D=82):
     D = D + 1
     adj = np.zeros((D,D))
     for pair in input_index.T:
@@ -51,7 +51,7 @@ def reshape_index(input_index, D=88):
 
 # Once we have predicted edges,
 # need some way to unfold into a valid symmetric adjacency matrix
-def unfold_index(linearized, D=88):
+def unfold_index(linearized, D=82):
     adj = np.zeros((D, D))
     
     counter = 0
@@ -61,6 +61,9 @@ def unfold_index(linearized, D=88):
         counter += segment
     symmetric = adj + adj.T - np.diag(np.diag(adj + adj.T))
     return symmetric
+
+
+
 class DecodeNet(nn.Module):
     """
     Initialize an MLP for re-creating graph representations from latent space.
@@ -71,7 +74,7 @@ class DecodeNet(nn.Module):
     def __init__(
         self,
         num_features: int = 32, # This is the size of the latent space representations.
-        D: int = 88, # TODO figure this out
+        D: int = 82, # TODO figure this out
         p: float = 0.0,
     ):
         super().__init__()
@@ -133,7 +136,7 @@ class DecodeNet(nn.Module):
 
         return x, edge_index, edge_attr 
 
-        
+
 def train_decoder_epoch(model, optimizer, train_loader):
     """Train the model for one epoch.
     Args:
@@ -184,6 +187,7 @@ def train_decoder_epoch(model, optimizer, train_loader):
     loss_epoch = loss_epoch / len(train_loader.dataset)
 
     return loss_epoch 
+     
     
 def test_decoder_epoch(model, train_loader):
     """Test the model for one epoch.
